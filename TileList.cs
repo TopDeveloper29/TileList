@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.ComponentModel.Design;
 using System.Drawing;
-using System.IO;
-using System.Linq;
+using System.Drawing.Design;
 using System.Windows.Forms;
-using static System.Windows.Forms.ListView;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Windows.Forms.Design;
+
 
 namespace TileList
 {
@@ -32,20 +31,19 @@ namespace TileList
         public event EventHandler ItemsChanges;
 
         // Event handler for when the mouse enters an item
-        private void TileListItem_MouseEnter(object sender, EventArgs e)
+        private void Item_MouseEnter(object sender, EventArgs e)
         {
             if (this.Parent != null)
             {
                 Color parentColor = this.Parent.BackColor;
-                float fadeAmount = (float)1.3;
+                float fadeAmount = (float)6;
                 this.BackColor = ControlPaint.Light(parentColor, fadeAmount);
                 this.Cursor = Cursors.Hand;
             }
-
         }
 
         // Event handler for when the mouse leaves an item
-        private void TileListItem_MouseLeave(object sender, EventArgs e)
+        private void Item_MouseLeave(object sender, EventArgs e)
         {
             if (this.Parent != null)
             {
@@ -61,6 +59,7 @@ namespace TileList
 
         // Public properties
         [Browsable(true)]
+        [Category("Tile")]
         public override string Text
         {
             get { return _text; }
@@ -75,6 +74,7 @@ namespace TileList
         }
 
         [Browsable(true)]
+        [Category("Tile")]
         public Image Picture
         {
             get { return _image; }
@@ -86,6 +86,48 @@ namespace TileList
                     pictureBox.Image = _image;
                 }
             }
+        }        
+        [Browsable(true)]
+        [Category("Tile")]
+        public int Picture_Height
+        {
+            get { return _picture_height; }
+            set
+            {
+                int retval = Height;
+
+                if (value <= (int)(Height/1.5))
+                {
+                    retval = value;
+                }
+                else
+                {
+                    retval = (int)(Height/1.5);
+                }
+                _picture_height = retval;
+                pictureBox.Height = retval;
+            }
+        }
+        [Browsable(true)]
+        [Category("Tile")]
+        public int Picture_Width
+        {
+            get { return _picture_width; }
+            set
+            {
+                int retval = Width;
+
+                if (value <= Width)
+                {
+                    retval = value;
+                }
+                else
+                {
+                    retval = Width;
+                }
+                _picture_width = retval;
+                pictureBox.Width = retval;
+            }
         }
 
         // Private fields
@@ -93,6 +135,8 @@ namespace TileList
         private PictureBox pictureBox { get; set; }
         private string _text;
         private Image _image;
+        private int _picture_width { get; set; }
+        private int _picture_height { get; set; }
 
         // Constructor
         public TileListItem()
@@ -117,9 +161,14 @@ namespace TileList
             labpan.Dock = DockStyle.Bottom;
             this.Controls.Add(picpan);
             this.Controls.Add(labpan);
-            picpan.DoubleClick += _DoubleClick;
-            labpan.DoubleClick += _DoubleClick;
-            this.DoubleClick += _DoubleClick;
+
+            this.MouseEnter += new EventHandler(Item_MouseEnter);
+            label.MouseEnter += new EventHandler(Item_MouseEnter);
+            pictureBox.MouseEnter += new EventHandler(Item_MouseEnter);
+            this.MouseLeave += new EventHandler(Item_MouseLeave);
+            label.MouseLeave += new EventHandler(Item_MouseLeave);
+            pictureBox.MouseLeave += new EventHandler(Item_MouseLeave);
+
         }
 
         private void _DoubleClick(object sender, EventArgs e)
@@ -128,12 +177,8 @@ namespace TileList
         }
     }
 
-    // Custom control for displaying a list of file/folder items
-    [ToolboxItem(true)]
-    [ToolboxBitmap(typeof(TileListListView))]
-
-    // Custom collection class for managing file/folder items
-    public class TileListCollection : IEnumerable<TileListItem>
+    // Custom collection class for managing  items
+    public class TileListCollection : Collection<TileListItem>
     {
         // Event for when an item in the collection changes
         public event EventHandler ItemChanged;
@@ -142,65 +187,69 @@ namespace TileList
         // Event for when an item in the collection is double-clicked
         public event EventHandler<TileListItemEventArgs> ItemDoubleClicked;
 
-        // Event handler for double-clicking on an item in the collection
-        private void Item_DoubleClicked(object sender, TileListItemEventArgs e)
-        {
-            TileListItem item = e.Item;
-            ItemDoubleClicked?.Invoke(this, e);
-        }
-        // Event handler for item change on an item in the collection
-        private void Item_ChangedFromItem(object sender, EventArgs e)
-        {
-            InternalItemChanged?.Invoke(this, EventArgs.Empty);
-        }
-
         // Internal fields and properties
-        private List<TileListItem> _items = new List<TileListItem>();
+        private Collection<TileListItem> _items = new Collection<TileListItem>();
 
-        // Constructor
-        public TileListCollection() { }
+        public new int Count => _items.Count;
+
+        public object SyncRoot => ((ICollection)_items).SyncRoot;
+
+        public bool IsSynchronized => ((ICollection)_items).IsSynchronized;
 
         // Public methods
         public void Add(TileListItem item)
         {
             item.OnItemDoubleClicked += Item_DoubleClicked;
             item.ItemsChanges += Item_ChangedFromItem;
-            this._items.Add(item);
+            _items.Add(item);
             ItemChanged?.Invoke(this, EventArgs.Empty);
-
         }
 
         public void Remove(int index)
         {
             _items.RemoveAt(index);
             ItemChanged?.Invoke(this, EventArgs.Empty);
-
         }
 
-        public void Clear()
+        public new void Clear()
         {
             _items.Clear();
             ItemChanged?.Invoke(this, EventArgs.Empty);
-
         }
 
-        // Methods required for IEnumerable implementation to allow the class to be enumerated properly
-        public IEnumerator<TileListItem> GetEnumerator()
+        public void CopyTo(Array array, int index)
+        {
+            ((ICollection)_items).CopyTo(array, index);
+        }
+
+        public IEnumerator GetEnumerator()
         {
             return _items.GetEnumerator();
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        // Private methods
+        private void Item_DoubleClicked(object sender, TileListItemEventArgs e)
         {
-            return GetEnumerator();
+            TileListItem item = e.Item;
+            ItemDoubleClicked?.Invoke(this, e);
+        }
+
+        private void Item_ChangedFromItem(object sender, EventArgs e)
+        {
+            InternalItemChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
-    public class TileListListView : Panel
+
+    // Custom control for displaying a list of items
+    [ToolboxItem(true)]
+    [ToolboxBitmap(typeof(TileListView))]
+    public class TileListView : Panel
     {
         // Event for when an item in the list is double-clicked
         public event EventHandler<TileListItemEventArgs> ItemDoubleClicked;
         public event EventHandler ItemsChanged;
+        public event EventHandler ItemsSizeChanged;
 
         // Event handler for when an item in the collection changes
         private void HandleItemChanged(object sender, EventArgs e)
@@ -228,36 +277,66 @@ namespace TileList
         // Internal fields and properties
         private int RowX { get; set; }
         private int RowY { get; set; }
-        private int RowWidth { get; set; }
-        private int RowHeight { get; set; }
         private int RowCount { get; set; }
         private int RowMaxCount { get; set; }
+        private int _height { get; set; }
+        private int _width { get; set; }
+        private int _picture_width { get; set; }
+        private int _picture_height { get; set; }
+        private int _Margin { get; set; }
 
         // Public fields and properties
-        public TileListCollection Items { get; }
+        [Category("Data")]
+        public TileListCollection Items { get; set; }
+
+        [Browsable(true)]
+        [Category("Tile")]
+        public new int Height { get { return _height; } set { ItemsChanged?.Invoke(this, EventArgs.Empty); _height = value; } }
+        [Browsable(true)]
+        [Category("Tile")]
+        public new int Width { get { return _width; } set{ ItemsChanged?.Invoke(this, EventArgs.Empty); _width = value;} }
+        [Browsable(true)]
+        [Category("Tile")]
+        public int Picture_Height { get { return _picture_height; } set { ItemsSizeChanged?.Invoke(this, EventArgs.Empty); _picture_height = value; } }
+        [Browsable(true)]
+        [Category("Tile")]
+        public int Picture_Width { get { return _picture_width; } set { ItemsSizeChanged?.Invoke(this, EventArgs.Empty); _picture_width = value; } }
+        [Browsable(true)]
+        [Category("Tile")]
+        public new int Margin { get { return _Margin; } set { ItemsSizeChanged?.Invoke(this, EventArgs.Empty); _Margin = value; } }
 
         // Constructor
-        public TileListListView()
+        public TileListView()
         {
             RowX = 0;
             RowY = 0;
             RowCount = 0;
-            RowWidth = 95;
-            RowHeight = 125;
+            Width = 95;
+            Height = 125;
 
             Items = new TileListCollection();
             Items.InternalItemChanged += HandleItemsInternalChanged;
             Items.ItemChanged += HandleItemChanged;
             Items.ItemDoubleClicked += HandleItemClicked;
-
+            this.ItemsSizeChanged += ResizeItems;
             this.AutoScroll = true;
             this.HorizontalScroll.Enabled = false;
         }
 
         // Internal functions
+        private void ResizeItems(object sender, EventArgs e)
+        {
+            foreach (TileListItem item in this.Items)
+            {
+                item.Picture_Width = Picture_Width;
+                item.Picture_Height = Picture_Height;
+                item.Margin = new System.Windows.Forms.Padding(Margin,Margin,Margin,Margin);
+            }
+        }
+
         private void DrawList(bool must_be_draw)
         {
-            if ((this.ClientSize.Width / RowWidth) != RowMaxCount || must_be_draw == true)
+            if ((this.ClientSize.Width / Width) != RowMaxCount || must_be_draw == true)
             {
                 RowX = 0;
                 RowY = 0;
@@ -265,28 +344,28 @@ namespace TileList
                 this.Controls.Clear();
                 foreach (TileListItem item in this.Items)
                 {
-                    RowMaxCount = this.ClientSize.Width / RowWidth;
+                    RowMaxCount = this.ClientSize.Width / Width;
 
                     if (RowCount < RowMaxCount)
                     {
                         item.Location = new Point(RowX, RowY);
-                        item.Size = new Size(RowWidth, RowHeight);
+                        item.Size = new Size(Width, Height);
                         this.Controls.Add(item);
-                        RowX += RowWidth;
+                        RowX += Width;
                         RowCount++;
                     }
                     else
                     {
                         RowX = 0;
-                        RowY += RowHeight;
+                        RowY += Height;
                         RowCount = -1;
                         item.Location = new Point(RowX, RowY);
-                        item.Size = new Size(RowWidth, RowHeight);
+                        item.Size = new Size(Width, Height);
                         this.Controls.Add(item);
                         RowCount++;
                     }
                 }
-                this.AutoScrollMinSize = new Size(0, RowY + (RowCount > 0 ? RowHeight : 0));
+                this.AutoScrollMinSize = new Size(0, RowY + (RowCount > 0 ? Height : 0));
             }
         }
     }
